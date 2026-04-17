@@ -7,6 +7,21 @@ handles authentication and authorization. Websockets also send header
 information and cookies, so you can use existing authentication mechanisms with
 this server.
 
+> [!IMPORTANT]
+> `y-websocket-server` is intended as a **development server** or as a
+> **starting point** for building your own backend. It is intentionally small
+> and easy to read - fork it, copy it, or adapt `setupWSConnection` into your
+> own Node server.
+>
+> For a production-ready backend with persistence, scaling, authentication,
+> presence, webhooks, and more, look at one of the full-featured providers:
+>
+> * [YHub](https://github.com/yjs/yhub) - the official Yjs backend
+> * [Hocuspocus](https://tiptap.dev/hocuspocus) - batteries-included backend
+>   from the Tiptap team
+> * See the [Yjs docs](https://docs.yjs.dev/ecosystem/connection-provider)
+>   for a full list of connection providers.
+
 ## Quick Start
 
 ### Install dependencies
@@ -49,15 +64,34 @@ HOST=localhost PORT=1234 npx y-websocket
 
 Since npm symlinks the `y-websocket` executable from your local `./node_modules/.bin` folder, you can simply run npx. The `PORT` environment variable already defaults to 1234, and `HOST` defaults to `localhost`.
 
-### Websocket Server with Persistence
+### Persistence
 
-Persist document updates in a LevelDB database.
+Documents live in memory by default and are lost when the server restarts.
+Persistence is now configured **programmatically** rather than through an
+env variable. Import `setPersistence` from `@y/websocket-server/utils` and
+plug in any storage backend that implements `bindState` and `writeState`:
 
-See [LevelDB Persistence](https://github.com/yjs/y-leveldb) for more info.
+```js
+import { setPersistence } from '@y/websocket-server/utils'
 
-```sh
-HOST=localhost PORT=1234 YPERSISTENCE=./dbDir npx y-websocket
+setPersistence({
+  bindState: async (docName, ydoc) => {
+    // Called when a Y.Doc is first accessed.
+    // Load the persisted state for `docName` and apply it to `ydoc`.
+    //
+    // It is recommended to also subscribe to `ydoc.on('update', update => ...)`
+    // here so you can persist updates incrementally as they happen, rather
+    // than only on shutdown.
+  },
+  writeState: async (docName, ydoc) => {
+    // Called when the last connected client disconnects from this document
+    // (i.e. the session is closing). Flush / persist any remaining state.
+  }
+})
 ```
+
+If you need durable, production-grade persistence, use YHub or Hocuspocus
+instead of rolling your own.
 
 ### Websocket Server with HTTP callback
 
@@ -75,6 +109,17 @@ Can take the following ENV variables:
 CALLBACK_URL=http://localhost:3000/ CALLBACK_OBJECTS='{"prosemirror":"XmlFragment"}' npm start
 ```
 This sends a debounced callback to `localhost:3000` 2 seconds after receiving an update (default `DEBOUNCE_WAIT`) with the data of an XmlFragment named `"prosemirror"` in the body.
+
+## Docker
+
+A `Dockerfile` is included for convenience. Build and run:
+
+```sh
+docker build -t y-websocket-server .
+docker run -p 1234:1234 y-websocket-server
+```
+
+The container binds to `::` (all interfaces) on port `1234` by default.
 
 ## License
 
